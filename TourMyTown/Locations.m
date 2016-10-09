@@ -8,14 +8,20 @@
 
 #import "Locations.h"
 #import "Location.h"
+#import "AFNetworking.h"
+#import <MobileCoreServices/UTType.h>
 
-static NSString* const kBaseURL = @"http://45.124.66.158:3001/";
-static NSString* const kLocations = @"locations";
-static NSString* const kFiles = @"files";
+//static NSString* const kBaseURL = @"http://127.0.0.1:3001/";
+
+//static NSString* const kBaseURL = @"http://45.124.66.158:3001/";
+//static NSString* const kLocations = @"locations/";
+//static NSString* const kFiles = @"files/";
 
 
-@interface Locations ()
+@interface Locations ()<NSURLSessionDataDelegate>
+@property (nonatomic, strong) Location *currentLocation;
 @property (nonatomic, strong) NSMutableArray* objects;
+
 @end
 
 @implementation Locations
@@ -25,6 +31,7 @@ static NSString* const kFiles = @"files";
     self = [super init];
     if (self) {
         _objects = [NSMutableArray array];
+        _locations = [NSMutableArray arrayWithCapacity:1];
     }
     return self;
 }
@@ -41,7 +48,9 @@ static NSString* const kFiles = @"files";
 
 - (void)loadImage:(Location*)location
 {
-    NSURL* url = [NSURL URLWithString:[[kBaseURL stringByAppendingPathComponent:kFiles] stringByAppendingPathComponent:location.imageId]]; //1
+    NSURL* url = [NSURL URLWithString:[[kBaseURL stringByAppendingString:kFiles] stringByAppendingString:location.imageId]]; //1
+    
+    NSLog(@"ImageUrl: %@", url);
     
     NSURLSessionConfiguration* config = [NSURLSessionConfiguration defaultSessionConfiguration];
     NSURLSession* session = [NSURLSession sessionWithConfiguration:config];
@@ -53,10 +62,13 @@ static NSString* const kFiles = @"files";
             if (!image) {
                 NSLog(@"unable to build image");
             }
-            location.image = image;
-            if (self.delegate) {
-                [self.delegate modelUpdated];
-            }
+            dispatch_async(dispatch_get_main_queue(), ^{
+                location.image = image;
+                if (self.delegate) {
+                    [self.delegate modelUpdated];
+                }
+            });
+            
         }
     }];
     
@@ -65,7 +77,7 @@ static NSString* const kFiles = @"files";
 
 - (void)import
 {
-    NSURL* url = [NSURL URLWithString:[kBaseURL stringByAppendingPathComponent:kLocations]]; //1
+    NSURL* url = [NSURL URLWithString:[kBaseURL stringByAppendingString:kLocations]]; //1
     
     NSMutableURLRequest* request = [NSMutableURLRequest requestWithURL:url];
     request.HTTPMethod = @"GET"; //2
@@ -86,12 +98,15 @@ static NSString* const kFiles = @"files";
 
 - (void)parseAndAddLocations:(NSArray*)locations toArray:(NSMutableArray*)destinationArray
 {
+    [_locations removeAllObjects];
+    
     for (NSDictionary* item in locations) {
         Location* location = [[Location alloc] initWithDictionary:item];
         [destinationArray addObject:location];
-        
         if (location.imageId) { //1
             [self loadImage:location];
+            [_locations addObject:location];
+
         }
     }
     
@@ -102,7 +117,7 @@ static NSString* const kFiles = @"files";
 
 - (void) runQuery:(NSString *)queryString
 {
-    NSString* urlStr = [[kBaseURL stringByAppendingPathComponent:kLocations] stringByAppendingString:queryString]; //1
+    NSString* urlStr = [[kBaseURL stringByAppendingString:kLocations] stringByAppendingString:queryString]; //1
     NSURL* url = [NSURL URLWithString:urlStr];
     
     NSMutableURLRequest* request = [NSMutableURLRequest requestWithURL:url];
@@ -143,25 +158,82 @@ static NSString* const kFiles = @"files";
     [self runQuery:query]; //7
 }
 
+
+- (void) saveNewLocationImageFirst1:(Location*)location {
+    
+    NSURL* url = [NSURL URLWithString:[kBaseURL stringByAppendingString:kFiles]]; //1
+    CGSize newSize = CGSizeMake(300, 400);
+    UIGraphicsBeginImageContext(CGSizeMake(300, 400));
+    [location.image drawInRect:CGRectMake(0,0,newSize.width,newSize.height)];
+    UIImage* newImage = UIGraphicsGetImageFromCurrentImageContext();
+    //NSLog(@" 转换图片1：%@",newImage);
+    UIGraphicsEndImageContext();
+    
+    NSData* bytes = UIImagePNGRepresentation(newImage); //4
+    
+    
+    AFHTTPSessionManager *manager = [AFHTTPSessionManager manager];
+    
+    [manager POST:[kBaseURL stringByAppendingString:kFiles] parameters:nil constructingBodyWithBlock:^(id<AFMultipartFormData>  _Nonnull formData) {
+        [formData appendPartWithFileData:bytes
+                                    name:@"files"
+                                fileName:@"logo.png" mimeType:@"image/jpeg"];
+    } success:^(NSURLSessionDataTask * _Nonnull task, id  _Nonnull responseObject) {
+        NSLog(@"responseObject: %@", responseObject);
+    } failure:^(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
+        NSLog(@"error: %@", error.localizedDescription);
+    }];
+}
+
 - (void) saveNewLocationImageFirst:(Location*)location
 {
-    NSURL* url = [NSURL URLWithString:[kBaseURL stringByAppendingPathComponent:kFiles]]; //1
-    NSMutableURLRequest* request = [NSMutableURLRequest requestWithURL:url];
-    request.HTTPMethod = @"POST"; //2
-    [request addValue:@"image/png" forHTTPHeaderField:@"Content-Type"]; //3
+    
+    self.currentLocation = location;
+    
+    NSURL* url = [NSURL URLWithString:[kBaseURL stringByAppendingString:kFiles]]; //1
+    
+    NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:url];
+    
+    NSString *charset = (NSString *)CFStringConvertEncodingToIANACharSetName(CFStringConvertNSStringEncodingToEncoding(NSUTF8StringEncoding));
+    
+    [request setHTTPMethod:@"POST"];
+    
+    NSString *boundary = @"0xKhTmLbOuNdArY";
+    
+    NSString *contentType = [NSString stringWithFormat:@"multipart/form-data; charset=%@; boundary=%@",charset, boundary];
+    [request addValue:contentType forHTTPHeaderField: @"Content-Type"];
+    
+    NSMutableData *tempPostData = [NSMutableData data];
+    [tempPostData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
+    
+    
+    
+    // Sample file to send as data
+    [tempPostData appendData:[[NSString stringWithFormat:@"Content-Disposition: form-data; name=\"files\"; filename=\"%@\"\r\n", @"company-logo.png"] dataUsingEncoding:NSUTF8StringEncoding]];
+    [tempPostData appendData:[[[@"Content-Type: " stringByAppendingString:AFContentTypeForPathExtension([@"company-logo.png" pathExtension])]stringByAppendingString:@"\r\n\r\n"] dataUsingEncoding:NSUTF8StringEncoding]];
+    
+    CGSize newSize = CGSizeMake(300, 400);
+    UIGraphicsBeginImageContext(CGSizeMake(300, 400));
+    [location.image drawInRect:CGRectMake(0,0,newSize.width,newSize.height)];
+    UIImage* newImage = UIGraphicsGetImageFromCurrentImageContext();
+    //NSLog(@" 转换图片1：%@",newImage);
+    UIGraphicsEndImageContext();
+    
+    NSData* bytes = UIImagePNGRepresentation(newImage); //4
+    
+    [tempPostData appendData:bytes];
+    
+    [tempPostData appendData:[[NSString stringWithFormat:@"\r\n--%@--\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
+    
+    [request setHTTPBody:tempPostData];
+    [request setValue:[NSString stringWithFormat:@"%lu",(unsigned long)tempPostData.length] forHTTPHeaderField:@"Content-Length"];
+    
+    
     
     NSURLSessionConfiguration* config = [NSURLSessionConfiguration defaultSessionConfiguration];
-    NSURLSession* session = [NSURLSession sessionWithConfiguration:config];
-    
-    NSData* bytes = UIImagePNGRepresentation(location.image); //4
-    NSURLSessionUploadTask* task = [session uploadTaskWithRequest:request fromData:bytes completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) { //5
-        if (error == nil && [(NSHTTPURLResponse*)response statusCode] < 300) {
-            NSDictionary* responseDict = [NSJSONSerialization JSONObjectWithData:data options:0 error:NULL];
-            location.imageId = responseDict[@"_id"]; //6
-            [self persist:location]; //7
-        }
-    }];
-    [task resume];
+    NSURLSession* session = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:[NSOperationQueue mainQueue]];
+    NSURLSessionUploadTask *streamTask = [session uploadTaskWithStreamedRequest:request];
+    [streamTask resume];
 }
 
 
@@ -178,10 +250,10 @@ static NSString* const kFiles = @"files";
     }
     
     
-    NSString* locations = [kBaseURL stringByAppendingPathComponent:kLocations];
+    NSString* locations = [kBaseURL stringByAppendingString:kLocations];
     
     BOOL isExistingLocation = location._id != nil;
-    NSURL* url = isExistingLocation ? [NSURL URLWithString:[locations stringByAppendingPathComponent:location._id]] :
+    NSURL* url = isExistingLocation ? [NSURL URLWithString:[locations stringByAppendingString:location._id]] :
     [NSURL URLWithString:locations]; //1
     
     NSMutableURLRequest* request = [NSMutableURLRequest requestWithURL:url];
@@ -203,4 +275,82 @@ static NSString* const kFiles = @"files";
     }];
     [dataTask resume];
 }
+
+static inline NSString * AFContentTypeForPathExtension(NSString *extension) {
+#ifdef __UTTYPE__
+    NSString *UTI = (__bridge_transfer NSString *)UTTypeCreatePreferredIdentifierForTag(kUTTagClassFilenameExtension, (__bridge CFStringRef)extension, NULL);
+    NSString *contentType = (__bridge_transfer NSString *)UTTypeCopyPreferredTagWithClass((__bridge CFStringRef)UTI, kUTTagClassMIMEType);
+    if (!contentType) {
+        return @"application/octet-stream";
+    } else {
+        return contentType;
+    }
+#else
+#pragma unused (extension)
+    return @"application/octet-stream";
+#endif
+}
+
+
+#pragma makr NSURLSessionTaskDelegate
+
+
+- (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task needNewBodyStream:(void (^)(NSInputStream * _Nullable))completionHandler {
+    NSLog(@"completionHandler");
+}
+
+- (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didSendBodyData:(int64_t)bytesSent totalBytesSent:(int64_t)totalBytesSent totalBytesExpectedToSend:(int64_t)totalBytesExpectedToSend {
+    NSLog(@"totalBytesSent: %llu", totalBytesSent);
+    NSLog(@"totalBytesExpectedToSend: %llu", totalBytesExpectedToSend);
+    
+    
+}
+
+- (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didCompleteWithError:(NSError *)error {
+    NSLog(@"error: %@", error.localizedDescription);
+    
+    if (!error) {
+        
+    }
+    
+}
+
+- (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task willPerformHTTPRedirection:(NSHTTPURLResponse *)response newRequest:(NSURLRequest *)request completionHandler:(void (^)(NSURLRequest * _Nullable))completionHandler {
+    NSLog(@"response: %@", response);
+}
+
+
+- (void)URLSession:(NSURLSession *)session dataTask:(NSURLSessionDataTask *)dataTask didReceiveData:(NSData *)data {
+    
+    NSLog(@"dataTask");
+    
+    if (!data) {
+        return;
+    }
+    NSDictionary *dic = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+    if (dic) {
+        NSLog(@"_id: %@", dic[@"_id"]);
+        
+        if (dic[@"_id"]) {
+            self.currentLocation.imageId = dic[@"_id"];
+            [self persist:self.currentLocation];
+        }
+    }
+}
+
+
+
+
 @end
+
+
+
+
+
+
+
+
+
+
+
+

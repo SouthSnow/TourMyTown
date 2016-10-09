@@ -7,6 +7,7 @@
 //
 
 #import "MapViewController.h"
+#import "MapViewController+Handler.h"
 
 #import "MBProgressHUD.h"
 
@@ -24,6 +25,7 @@
 @property (nonatomic) BOOL waitingForLocation;
 @property (nonatomic, retain) Location* recentLocation;
 @property (nonatomic, strong, readwrite) CLLocationManager *manager;
+@property (weak, nonatomic) IBOutlet UIImageView *showImageView;
 
 @end
 
@@ -33,7 +35,8 @@
 {
     [super viewDidLoad];
 	// Do any additional setup after loading the view, typically from a nib.
-    
+    self.imageView = self.showImageView;
+
     UILongPressGestureRecognizer* longTap = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(tapped:)];
     [self.mapView addGestureRecognizer:longTap];
     
@@ -46,6 +49,29 @@
     self.mapView.showsUserLocation = YES;
 
 }
+
+- (IBAction)btnPressed:(UIButton *)sender {
+    
+    NSUInteger tag = sender.tag;
+    
+    if (tag == 10) {
+        
+    }
+    else if (11 == tag) {
+       
+        AppDelegate *dele = [AppDelegate appDelegate];
+        [self loadImageWithImageID: [dele.locations.locations[0] imageId]];
+        
+    }
+    else {
+        
+        AppDelegate *dele = [AppDelegate appDelegate];
+        [self deleteLocationWithID:[dele.locations.locations.lastObject _id]];
+        
+    }
+    
+}
+
 
 #pragma mark CLLocationManagerDelegate 
 

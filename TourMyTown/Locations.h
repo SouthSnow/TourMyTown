@@ -21,6 +21,9 @@
 
 @property (nonatomic, weak) id<LocationModelDelegate> delegate;
 
+@property (nonatomic, strong) NSMutableArray* locations;
+
+
 - (NSArray*) filteredLocations;
 - (void) addLocation:(Location*)location;
 

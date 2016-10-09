@@ -11,6 +11,9 @@
 
 @interface MapViewController : UIViewController <MKMapViewDelegate>
 @property (nonatomic, weak) IBOutlet MKMapView *mapView;
+@property (nonatomic, strong) UIImageView *imageView;
+
 - (IBAction)updateFilter:(id)sender;
+
 
 @end
