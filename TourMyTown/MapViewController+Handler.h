@@ -14,4 +14,6 @@
 
 - (void)deleteLocationWithID:(NSString*)locationID;
 
+- (void)downLoadImageWithKey:(NSString*)key;
+
 @end

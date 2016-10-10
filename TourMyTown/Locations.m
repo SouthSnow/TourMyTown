@@ -190,7 +190,7 @@
     
     self.currentLocation = location;
     
-    NSURL* url = [NSURL URLWithString:[kBaseURL stringByAppendingString:kFiles]]; //1
+    NSURL* url = [[NSURL URLWithString:kBaseURL]URLByAppendingPathComponent:kFiles]; //1
     
     NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:url];
     
@@ -329,6 +329,7 @@ static inline NSString * AFContentTypeForPathExtension(NSString *extension) {
     }
     NSDictionary *dic = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
     if (dic) {
+        NSLog(@"dic: %@", dic);
         NSLog(@"_id: %@", dic[@"_id"]);
         
         if (dic[@"_id"]) {

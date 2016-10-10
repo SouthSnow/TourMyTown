@@ -13,6 +13,7 @@ static NSString* const kLocations = @"locations/";
 static NSString* const kFiles = @"files/";
 
 
+
 #ifndef __IPHONE_5_0
 #warning "This project uses features only available in iOS SDK 5.0 and later."
 #endif
@@ -20,4 +21,9 @@ static NSString* const kFiles = @"files/";
 #ifdef __OBJC__
     #import <UIKit/UIKit.h>
     #import <Foundation/Foundation.h>
+
+
+    #import "MBProgressHUD.h"
+
+
 #endif

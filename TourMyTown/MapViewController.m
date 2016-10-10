@@ -55,7 +55,7 @@
     NSUInteger tag = sender.tag;
     
     if (tag == 10) {
-        
+        [self downLoadImageWithKey:@"57fa1bc508f4280b3fa6af53.png"];
     }
     else if (11 == tag) {
        
